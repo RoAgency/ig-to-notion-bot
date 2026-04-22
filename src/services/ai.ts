@@ -34,10 +34,14 @@ Twoja finalna odpowiedź zostania wklejona bezpośrednio do notatki, więc nie u
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
+            config: {
+                thinkingConfig: { thinkingBudget: 0 },
+            },
         });
 
-        if (response.text) {
-            return response.text;
+        const text = response.text;
+        if (text !== undefined && text !== null) {
+            return text;
         } else {
             throw new Error("Pusta odpowiedź od modelu Gemini.");
         }
