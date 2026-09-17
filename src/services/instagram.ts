@@ -25,6 +25,25 @@ export async function processInstagramReel(url: string): Promise<{ description: 
 
         const data = response.data;
 
+        // RapidAPI sometimes returns a plain string like "401 - {...json...}" instead of
+        // a parsed object when Instagram blocks the underlying scraper request.
+        if (typeof data === 'string') {
+            const igBlockMatch = data.match(/^(\d+)\s*-\s*(\{.+\})/s);
+            if (igBlockMatch) {
+                let igMessage = igBlockMatch[2];
+                try { igMessage = JSON.parse(igBlockMatch[2]).message; } catch {}
+                const igStatus = parseInt(igBlockMatch[1]);
+                if (igStatus === 401 || igStatus === 403 || igMessage?.toLowerCase().includes('wait') || igMessage?.toLowerCase().includes('login')) {
+                    throw new Error(
+                        `⛔ Instagram zablokował scraper (${igStatus}): "${igMessage}".\n` +
+                        `To tymczasowa blokada – poczekaj kilka minut i spróbuj ponownie.`
+                    );
+                }
+                throw new Error(`Instagram API error ${igStatus}: ${igMessage}`);
+            }
+            throw new Error(`Nieoczekiwana odpowiedź tekstowa z API: ${data.slice(0, 200)}`);
+        }
+
         // Próbujemy różnych ścieżek dostępu do danych, bo RapidAPI potrafi je zmieniać
         const media = data?.data?.shortcode_media ||
             data?.graphql?.shortcode_media ||
@@ -33,14 +52,13 @@ export async function processInstagramReel(url: string): Promise<{ description: 
             data?.items?.[0];
 
         if (!media) {
-            // Surface the top-level keys so we can update the parser
             const topLevelKeys = Object.keys(data || {});
             const firstLevelPreview = JSON.stringify(data, null, 2).slice(0, 800);
             console.error("DEBUG response structure:", firstLevelPreview);
             throw new Error(
                 `API Instagrama zmieniło format odpowiedzi.\n` +
                 `Klucze główne: [${topLevelKeys.join(', ')}]\n` +
-                `Podgląd odpowiedzi:\n${firstLevelPreview}`
+                `Podgląd:\n${firstLevelPreview}`
             );
         }
 
