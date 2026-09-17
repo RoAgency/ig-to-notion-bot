@@ -33,8 +33,15 @@ export async function processInstagramReel(url: string): Promise<{ description: 
             data?.items?.[0];
 
         if (!media) {
-            console.error("DEBUG: Nieznana struktura odpowiedzi:", JSON.stringify(data, null, 2));
-            throw new Error(`Nie udało się pobrać danych z Instagrama. API zwróciło nieoczekiwaną strukturę.`);
+            // Surface the top-level keys so we can update the parser
+            const topLevelKeys = Object.keys(data || {});
+            const firstLevelPreview = JSON.stringify(data, null, 2).slice(0, 800);
+            console.error("DEBUG response structure:", firstLevelPreview);
+            throw new Error(
+                `API Instagrama zmieniło format odpowiedzi.\n` +
+                `Klucze główne: [${topLevelKeys.join(', ')}]\n` +
+                `Podgląd odpowiedzi:\n${firstLevelPreview}`
+            );
         }
 
         // Wyciąganie opisu (obsługa różnych nazw pól w v1 i v2)
@@ -58,11 +65,26 @@ export async function processInstagramReel(url: string): Promise<{ description: 
         return { description, videoUrl, thumbnailUrl };
 
     } catch (error: any) {
-        if (error.response && error.response.status === 429) {
-            throw new Error("LIMIT_EXCEEDED: Darmowy limit dzienny API (10 zapytań) został wyczerpany. Spróbuj ponownie jutro.");
+        if (error.response) {
+            const status = error.response.status;
+            const body = JSON.stringify(error.response.data);
+
+            if (status === 429) {
+                throw new Error("LIMIT_EXCEEDED: Darmowy limit dzienny API (10 zapytań) został wyczerpany. Spróbuj ponownie jutro.");
+            }
+            if (status === 401 || status === 403) {
+                throw new Error(`Błąd autoryzacji RapidAPI (${status}): klucz RAPID_API_KEY jest nieprawidłowy lub wygasł. Sprawdź klucz w ustawieniach.`);
+            }
+            if (status === 404) {
+                throw new Error(`Nie znaleziono rolki w Instagramie (404). Sprawdź, czy link jest prawidłowy i czy post jest publiczny.`);
+            }
+            if (status >= 500) {
+                throw new Error(`Serwer RapidAPI zwrócił błąd (${status}). Usługa może być chwilowo niedostępna – spróbuj za kilka minut.`);
+            }
+
+            throw new Error(`Błąd Instagrama (${status}): ${body}`);
         }
 
-        const message = error.response ? JSON.stringify(error.response.data) : error.message;
-        throw new Error(`Błąd Instagrama: ${message}`);
+        throw new Error(`Błąd połączenia z Instagram API: ${error.message}`);
     }
 }
