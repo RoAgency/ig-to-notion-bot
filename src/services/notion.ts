@@ -82,10 +82,8 @@ export async function saveToNotion(recipeMarkdown: string, originalUrl: string, 
                 type: "external",
                 external: { url: thumbnailUrl }
             } : undefined,
-            icon: thumbnailUrl ? {
-                type: "external",
-                external: { url: thumbnailUrl }
-            } : {
+            // External CDN URLs from Instagram expire quickly, so fall back to emoji icon
+            icon: {
                 type: "emoji",
                 emoji: "🍲"
             },

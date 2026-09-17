@@ -58,8 +58,9 @@ bot.on('message', async (msg) => {
             bot.editMessageText(`✅ Gotowe! Zapisano przepis w Notion:\n${notionUrl}`, { chat_id: chatId, message_id: processingMsg.message_id });
 
         } catch (error: any) {
-            console.error(error);
-            bot.sendMessage(chatId, `❌ Wystąpił błąd podczas przetwarzania linku:\n${error.message || error}`);
+            const msg = error.message || String(error);
+            console.error(`[ERROR] ${msg}`);
+            bot.sendMessage(chatId, `❌ Wystąpił błąd:\n${msg}`);
         }
     } else if (text) {
         bot.sendMessage(chatId, 'Proszę wyślij mi poprawny link do rolki na Instagramie.');

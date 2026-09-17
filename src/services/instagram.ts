@@ -58,11 +58,26 @@ export async function processInstagramReel(url: string): Promise<{ description: 
         return { description, videoUrl, thumbnailUrl };
 
     } catch (error: any) {
-        if (error.response && error.response.status === 429) {
-            throw new Error("LIMIT_EXCEEDED: Darmowy limit dzienny API (10 zapytań) został wyczerpany. Spróbuj ponownie jutro.");
+        if (error.response) {
+            const status = error.response.status;
+            const body = JSON.stringify(error.response.data);
+
+            if (status === 429) {
+                throw new Error("LIMIT_EXCEEDED: Darmowy limit dzienny API (10 zapytań) został wyczerpany. Spróbuj ponownie jutro.");
+            }
+            if (status === 401 || status === 403) {
+                throw new Error(`Błąd autoryzacji RapidAPI (${status}): klucz RAPID_API_KEY jest nieprawidłowy lub wygasł. Sprawdź klucz w ustawieniach.`);
+            }
+            if (status === 404) {
+                throw new Error(`Nie znaleziono rolki w Instagramie (404). Sprawdź, czy link jest prawidłowy i czy post jest publiczny.`);
+            }
+            if (status >= 500) {
+                throw new Error(`Serwer RapidAPI zwrócił błąd (${status}). Usługa może być chwilowo niedostępna – spróbuj za kilka minut.`);
+            }
+
+            throw new Error(`Błąd Instagrama (${status}): ${body}`);
         }
 
-        const message = error.response ? JSON.stringify(error.response.data) : error.message;
-        throw new Error(`Błąd Instagrama: ${message}`);
+        throw new Error(`Błąd połączenia z Instagram API: ${error.message}`);
     }
 }

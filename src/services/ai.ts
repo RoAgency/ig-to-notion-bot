@@ -36,10 +36,16 @@ Twoja finalna odpowiedź zostania wklejona bezpośrednio do notatki, więc nie u
             contents: prompt,
         });
 
-        if (response.text) {
-            return response.text;
+        // gemini-2.5-flash is a thinking model — response.text aggregates all text parts
+        const text = response.text ?? response.candidates?.[0]?.content?.parts
+            ?.filter((p: any) => p.text)
+            .map((p: any) => p.text)
+            .join('');
+
+        if (text && text.trim().length > 0) {
+            return text;
         } else {
-            throw new Error("Pusta odpowiedź od modelu Gemini.");
+            throw new Error("Pusta odpowiedź od modelu Gemini. Sprawdź czy klucz GEMINI_API_KEY jest aktywny.");
         }
     } catch (error: any) {
         throw new Error(`Błąd generowania przepisu przez AI: ${error.message}`);
