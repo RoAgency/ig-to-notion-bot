@@ -33,8 +33,15 @@ export async function processInstagramReel(url: string): Promise<{ description: 
             data?.items?.[0];
 
         if (!media) {
-            console.error("DEBUG: Nieznana struktura odpowiedzi:", JSON.stringify(data, null, 2));
-            throw new Error(`Nie udało się pobrać danych z Instagrama. API zwróciło nieoczekiwaną strukturę.`);
+            // Surface the top-level keys so we can update the parser
+            const topLevelKeys = Object.keys(data || {});
+            const firstLevelPreview = JSON.stringify(data, null, 2).slice(0, 800);
+            console.error("DEBUG response structure:", firstLevelPreview);
+            throw new Error(
+                `API Instagrama zmieniło format odpowiedzi.\n` +
+                `Klucze główne: [${topLevelKeys.join(', ')}]\n` +
+                `Podgląd odpowiedzi:\n${firstLevelPreview}`
+            );
         }
 
         // Wyciąganie opisu (obsługa różnych nazw pól w v1 i v2)
