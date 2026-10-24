@@ -85,3 +85,27 @@ export async function saveAiNote(note: AiNote, originalUrl: string, thumbnailUrl
         throw new Error(`Błąd zapisywania notatki do Notion: ${error.message}`);
     }
 }
+
+/** Czy ta rolka jest już w bazie Wiedza AI (porównanie po kodzie rolki w kolumnie Link). */
+export async function aiNoteExists(url: string): Promise<boolean> {
+    const apiKey = process.env.NOTION_API_KEY;
+    const databaseId = process.env.NOTION_AI_DATABASE_ID;
+    if (!apiKey || !databaseId) return false;
+    const code = url.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/)?.[1];
+    if (!code) return false;
+    try {
+        const notion = new Client({ auth: apiKey });
+        const db: any = await notion.databases.retrieve({ database_id: databaseId.split('?')[0].replace(/-/g, '').slice(-32) });
+        const dataSourceId = db.data_sources?.[0]?.id;
+        if (!dataSourceId) return false;
+        const res: any = await notion.dataSources.query({
+            data_source_id: dataSourceId,
+            filter: { property: 'Link', url: { contains: code } },
+            page_size: 1
+        } as any);
+        return res.results.length > 0;
+    } catch (e: any) {
+        console.error(`[AI] Nie udało się sprawdzić duplikatu: ${e.message}`);
+        return false;
+    }
+}
