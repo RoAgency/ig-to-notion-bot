@@ -1,4 +1,29 @@
 import { Client } from '@notionhq/client';
+import axios from 'axios';
+
+/**
+ * Linki do zdjęć z Instagrama są czasowe (wygasają po kilku dniach), więc
+ * pobieramy zdjęcie i wgrywamy je do Notion na stałe. Zwraca id pliku w Notion
+ * albo null, jeśli się nie udało (wtedy zostaje stary link jako zapas).
+ */
+async function uploadImageToNotion(notion: Client, imageUrl: string): Promise<string | null> {
+    try {
+        const res = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30000 });
+        const contentType = String(res.headers['content-type'] || 'image/jpeg').split(';')[0];
+        const ext = contentType.includes('png') ? 'png' : contentType.includes('webp') ? 'webp' : 'jpg';
+        const filename = `okladka.${ext}`;
+
+        const upload: any = await notion.fileUploads.create({ mode: 'single_part', filename, content_type: contentType } as any);
+        await notion.fileUploads.send({
+            file_upload_id: upload.id,
+            file: { filename, data: new Blob([res.data], { type: contentType }) }
+        } as any);
+        return upload.id;
+    } catch (error: any) {
+        console.error(`Nie udało się wgrać zdjęcia do Notion: ${error.message}`);
+        return null;
+    }
+}
 
 export async function saveToNotion(recipeMarkdown: string, originalUrl: string, thumbnailUrl: string | null): Promise<string> {
     const apiKey = process.env.NOTION_API_KEY;
@@ -26,15 +51,22 @@ export async function saveToNotion(recipeMarkdown: string, originalUrl: string, 
 
     const childrenBlocks: any[] = [];
 
+    // Osobne wgranie dla okładki i dla zdjęcia w treści - każde trzymane na stałe w Notion
+    let coverFileId: string | null = null;
+    let imageFileId: string | null = null;
+    if (thumbnailUrl) {
+        coverFileId = await uploadImageToNotion(notion, thumbnailUrl);
+        imageFileId = await uploadImageToNotion(notion, thumbnailUrl);
+    }
+
     // Dodanie zdjęcia na początku treści strony
     if (thumbnailUrl) {
         childrenBlocks.push({
             object: 'block',
             type: 'image',
-            image: {
-                type: 'external',
-                external: { url: thumbnailUrl }
-            }
+            image: imageFileId
+                ? { type: 'file_upload', file_upload: { id: imageFileId } }
+                : { type: 'external', external: { url: thumbnailUrl } }
         });
     }
 
@@ -78,10 +110,9 @@ export async function saveToNotion(recipeMarkdown: string, originalUrl: string, 
     try {
         const response: any = await notion.pages.create({
             parent: { database_id: cleanDatabaseId },
-            cover: thumbnailUrl ? {
-                type: "external",
-                external: { url: thumbnailUrl }
-            } : undefined,
+            cover: coverFileId
+                ? { type: "file_upload", file_upload: { id: coverFileId } }
+                : thumbnailUrl ? { type: "external", external: { url: thumbnailUrl } } : undefined,
             // External CDN URLs from Instagram expire quickly, so fall back to emoji icon
             icon: {
                 type: "emoji",
