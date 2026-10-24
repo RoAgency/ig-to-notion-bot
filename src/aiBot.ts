@@ -1,3 +1,4 @@
+import { importStarted, importFinished } from './shutdown';
 import TelegramBot from 'node-telegram-bot-api';
 import { processInstagramReel } from './services/instagram';
 import { transcribeAudio } from './services/audio';
@@ -47,6 +48,7 @@ export function startAiBot(token: string) {
         if (links.length > 1) {
             if (batchRunning) return bot.sendMessage(chatId, '⏳ Import już trwa, poczekaj na podsumowanie.');
             batchRunning = true;
+            importStarted('ai', bot, chatId);
             let saved = 0, skipped = 0;
             const failed: string[] = [];
             try {
@@ -73,6 +75,7 @@ export function startAiBot(token: string) {
                 await bot.sendMessage(chatId, summary.slice(0, 4000));
             } finally {
                 batchRunning = false;
+                importFinished('ai');
             }
             return;
         }

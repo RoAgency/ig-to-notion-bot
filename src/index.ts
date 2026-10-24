@@ -1,3 +1,4 @@
+import { importStarted, importFinished } from './shutdown';
 import TelegramBot from 'node-telegram-bot-api';
 import dotenv from 'dotenv';
 import { processInstagramReel } from './services/instagram';
@@ -81,6 +82,7 @@ bot.on('message', async (msg) => {
     if (links.length > 1) {
         if (batchRunning) return bot.sendMessage(chatId, '⏳ Import już trwa, poczekaj na podsumowanie.');
         batchRunning = true;
+        importStarted('recipes', bot, chatId);
         let saved = 0, skipped = 0;
         const failed: string[] = [];
         try {
@@ -114,6 +116,7 @@ bot.on('message', async (msg) => {
             await bot.sendMessage(chatId, `❌ Błąd importu:\n${error.message}`);
         } finally {
             batchRunning = false;
+            importFinished('recipes');
         }
         return;
     }
