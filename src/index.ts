@@ -5,6 +5,7 @@ import { transcribeAudio } from './services/audio';
 import { generateRecipe } from './services/ai';
 import { saveToNotion } from './services/notion';
 import { backfillImages } from './services/backfill';
+import { startAiBot } from './aiBot';
 
 let backfillRunning = false;
 
@@ -21,6 +22,11 @@ const bot = new TelegramBot(token, { polling: true });
 
 console.log("Instagram to Notion Bot Started!");
 console.log("Waiting for Instagram Reel links...");
+
+// Drugi bot (Wiedza AI) startuje w tym samym procesie, jeśli ma swój token
+if (process.env.TELEGRAM_AI_BOT_TOKEN) {
+    startAiBot(process.env.TELEGRAM_AI_BOT_TOKEN);
+}
 
 bot.on('message', async (msg) => {
     const chatId = msg.chat.id;

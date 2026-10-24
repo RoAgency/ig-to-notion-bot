@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-type ReelData = { description: string, videoUrl: string | null, thumbnailUrl: string | null };
+export type ReelData = { description: string, videoUrl: string | null, thumbnailUrl: string | null, author?: string | null };
 
 /**
  * Główne wejście: najpierw HikerAPI (stabilniejsze), a jeśli nie ma klucza
@@ -61,7 +61,9 @@ async function fetchFromHiker(url: string, apiKey: string): Promise<ReelData> {
             throw new Error("HikerAPI nie zwróciło ani wideo, ani opisu tej rolki.");
         }
 
-        return { description, videoUrl, thumbnailUrl };
+        const author: string | null = media.user?.username || null;
+
+        return { description, videoUrl, thumbnailUrl, author };
     } catch (error: any) {
         if (error.response) {
             const status = error.response.status;

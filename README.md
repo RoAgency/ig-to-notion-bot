@@ -88,3 +88,17 @@ Ten bot jest gotowy do wdrożenia na **Railway.app**:
 - `npm run dev` - Uruchomienie bezpośrednie przez `ts-node`.
 
 Created by RoAgency 🚀
+
+
+## Drugi bot: Wiedza AI
+
+W tym samym procesie może działać drugi bot Telegrama, który zapisuje rolki o AI do osobnej bazy Notion
+(streszczenie, kluczowe wskazówki, narzędzia, gotowe prompty). Włącza się, gdy ustawione są zmienne:
+
+    TELEGRAM_AI_BOT_TOKEN=token_drugiego_bota_od_BotFather
+    NOTION_AI_DATABASE_ID=id_bazy_wiedza_ai
+
+Baza musi być udostępniona tej samej integracji Notion i mieć kolumny: Name, Kategoria (select),
+Narzędzia (multi-select), Autor (tekst), Link (URL).
+
+Bot przepisów ma też polecenie `/zdjecia`, które jednorazowo uzupełnia wygasłe zdjęcia w starych przepisach.
