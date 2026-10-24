@@ -1,10 +1,90 @@
 import axios from 'axios';
 
-export async function processInstagramReel(url: string): Promise<{ description: string, videoUrl: string | null, thumbnailUrl: string | null }> {
-    const rapidApiKey = process.env.RAPID_API_KEY;
-    if (!rapidApiKey) {
-        throw new Error("RAPID_API_KEY is not defined in .env");
+type ReelData = { description: string, videoUrl: string | null, thumbnailUrl: string | null };
+
+/**
+ * Główne wejście: najpierw HikerAPI (stabilniejsze), a jeśli nie ma klucza
+ * albo HikerAPI zawiedzie - zapasowo stary scraper JoTucker na RapidAPI.
+ */
+export async function processInstagramReel(url: string): Promise<ReelData> {
+    const hikerKey = process.env.HIKER_API_KEY;
+    const rapidKey = process.env.RAPID_API_KEY;
+
+    if (!hikerKey && !rapidKey) {
+        throw new Error("Brak klucza: ustaw HIKER_API_KEY (zalecane) lub RAPID_API_KEY w zmiennych Railway.");
     }
+
+    if (hikerKey) {
+        try {
+            return await fetchFromHiker(url, hikerKey);
+        } catch (error: any) {
+            console.error(`[HikerAPI] ${error.message}`);
+            if (!rapidKey) throw error;
+            console.log("HikerAPI zawiodło - próbuję zapasowo JoTucker (RapidAPI)...");
+        }
+    }
+
+    return fetchFromJoTucker(url, rapidKey as string);
+}
+
+function cleanInstagramUrl(url: string): string {
+    const match = url.match(/https?:\/\/(?:www\.)?instagram\.com\/(?:[A-Za-z0-9_.]+\/)?(reel|reels|p|tv)\/([A-Za-z0-9_-]+)/);
+    if (!match) return url.trim();
+    const kind = match[1] === 'reels' ? 'reel' : match[1];
+    return `https://www.instagram.com/${kind}/${match[2]}/`;
+}
+
+async function fetchFromHiker(url: string, apiKey: string): Promise<ReelData> {
+    const cleanUrl = cleanInstagramUrl(url);
+    console.log(`Calling HikerAPI for: ${cleanUrl}`);
+
+    try {
+        const response = await axios.get('https://api.hikerapi.com/v1/media/by/url', {
+            params: { url: cleanUrl },
+            headers: { 'x-access-key': apiKey, 'accept': 'application/json' },
+            timeout: 30000
+        });
+
+        const media = response.data;
+        if (!media || typeof media !== 'object') {
+            throw new Error(`Nieoczekiwana odpowiedź HikerAPI: ${String(media).slice(0, 200)}`);
+        }
+
+        // Karuzela: wideo może siedzieć w pierwszym elemencie "resources"
+        const firstResource = Array.isArray(media.resources) ? media.resources.find((r: any) => r?.video_url) || media.resources[0] : null;
+
+        const description: string = media.caption_text || media.caption?.text || "";
+        const videoUrl: string | null = media.video_url || firstResource?.video_url || null;
+        const thumbnailUrl: string | null = media.thumbnail_url || firstResource?.thumbnail_url || null;
+
+        if (!videoUrl && !description) {
+            throw new Error("HikerAPI nie zwróciło ani wideo, ani opisu tej rolki.");
+        }
+
+        return { description, videoUrl, thumbnailUrl };
+    } catch (error: any) {
+        if (error.response) {
+            const status = error.response.status;
+            const detail = JSON.stringify(error.response.data || '').slice(0, 300);
+            if (status === 401 || status === 403) {
+                throw new Error(`HikerAPI odrzuciło klucz (${status}): sprawdź HIKER_API_KEY w Railway.`);
+            }
+            if (status === 402) {
+                throw new Error("HikerAPI: skończyły się środki na koncie. Doładuj saldo na hikerapi.com.");
+            }
+            if (status === 404) {
+                throw new Error("Nie znaleziono rolki (404). Sprawdź, czy link jest prawidłowy i czy konto jest publiczne.");
+            }
+            if (status === 429) {
+                throw new Error("HikerAPI: zbyt wiele zapytań naraz. Spróbuj za chwilę.");
+            }
+            throw new Error(`Błąd HikerAPI (${status}): ${detail}`);
+        }
+        throw error;
+    }
+}
+
+async function fetchFromJoTucker(url: string, rapidApiKey: string): Promise<ReelData> {
 
     // Extract shortcode from URL
     const regex = /(?:reel|p)\/([A-Za-z0-9_-]+)/;

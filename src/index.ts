@@ -32,7 +32,7 @@ bot.on('message', async (msg) => {
             // 1. Send processing message
             const processingMsg = await bot.sendMessage(chatId, '⏳ Znaleziono link do Instagrama. Pobieram wideo i opis...');
 
-            // 2. Fetch from Instagram via RapidAPI
+            // 2. Fetch from Instagram (HikerAPI, zapasowo RapidAPI)
             const { description, videoUrl, thumbnailUrl } = await processInstagramReel(text);
 
             let transcriptionText = "";

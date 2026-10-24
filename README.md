@@ -18,7 +18,7 @@ Automatyczny bot Telegram, który zamienia rolki (Reels) z Instagrama w pięknie
 - **Baza danych**: Notion API
 - **AI**: Google Gemini Pro
 - **Audio**: AssemblyAI
-- **Instagram**: RapidAPI (Instagram Scraper 2 by JoTucker)
+- **Instagram**: HikerAPI (główne), RapidAPI - Instagram Scraper 2 by JoTucker (zapasowe, opcjonalne)
 
 ---
 
@@ -35,7 +35,8 @@ Będziesz potrzebował następujących dostępów:
     - Skopiuj `Database ID` (znajdziesz go w URL bazy).
 3.  **Google Gemini**: Pobierz klucz API z [Google AI Studio](https://aistudio.google.com/).
 4.  **AssemblyAI**: Załóż darmowe konto na [assemblyai.com](https://www.assemblyai.com/) i pobierz klucz.
-5.  **RapidAPI**: Zapisz się na [Instagram Scraper 2 (JoTucker)](https://rapidapi.com/JoTucker/api/instagram-scraper2) i pobierz `X-RapidAPI-Key`.
+5.  **HikerAPI** (zalecane): Załóż konto na [hikerapi.com](https://hikerapi.com) i skopiuj klucz jako `HIKER_API_KEY`.
+6.  **RapidAPI** (opcjonalnie, zapas): Zapisz się na [Instagram Scraper 2 (JoTucker)](https://rapidapi.com/JoTucker/api/instagram-scraper2) i pobierz `X-RapidAPI-Key`.
 
 ### 2. Instalacja Lokalna
 1.  Sklonuj repozytorium:
@@ -53,7 +54,8 @@ Będziesz potrzebował następujących dostępów:
     GEMINI_API_KEY=twój_klucz
     NOTION_API_KEY=twój_klucz
     NOTION_DATABASE_ID=id_bazy
-    RAPID_API_KEY=twój_klucz_rapidapi
+    HIKER_API_KEY=twój_klucz_hikerapi
+    RAPID_API_KEY=twój_klucz_rapidapi   # opcjonalnie, zapas
     ASSEMBLYAI_API_KEY=twój_klucz
     ```
 4.  Uruchom w trybie deweloperskim:
