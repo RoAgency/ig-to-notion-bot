@@ -4,6 +4,9 @@ import { processInstagramReel } from './services/instagram';
 import { transcribeAudio } from './services/audio';
 import { generateRecipe } from './services/ai';
 import { saveToNotion } from './services/notion';
+import { backfillImages } from './services/backfill';
+
+let backfillRunning = false;
 
 dotenv.config();
 
@@ -25,6 +28,24 @@ bot.on('message', async (msg) => {
 
     if (text === '/start') {
         return bot.sendMessage(chatId, 'Cześć! Jestem Twoim prywatnym botem do zapisywania przepisów z Instagrama.\nPo prostu wyślij mi link do Rolki z przepisem!');
+    }
+
+    if (text === '/zdjecia') {
+        if (backfillRunning) return bot.sendMessage(chatId, '⏳ Uzupełnianie zdjęć już trwa.');
+        backfillRunning = true;
+        try {
+            await bot.sendMessage(chatId, '🔎 Szukam przepisów z wygasłymi zdjęciami...');
+            const report = await backfillImages(async (line) => { await bot.sendMessage(chatId, line); });
+            let summary = `🏁 Gotowe. Przepisów w bazie: ${report.total}, do naprawy: ${report.needed}, naprawione: ${report.fixed}.`;
+            if (report.failed.length) summary += `\n\n⚠️ Nie udało się (${report.failed.length}):\n- ` + report.failed.join('\n- ');
+            await bot.sendMessage(chatId, summary);
+        } catch (error: any) {
+            console.error(`[ERROR] ${error.message}`);
+            await bot.sendMessage(chatId, `❌ Błąd uzupełniania zdjęć:\n${error.message}`);
+        } finally {
+            backfillRunning = false;
+        }
+        return;
     }
 
     if (text && (text.includes('instagram.com/reel/') || text.includes('instagram.com/p/'))) {

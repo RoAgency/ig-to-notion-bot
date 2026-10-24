@@ -6,7 +6,7 @@ import axios from 'axios';
  * pobieramy zdjęcie i wgrywamy je do Notion na stałe. Zwraca id pliku w Notion
  * albo null, jeśli się nie udało (wtedy zostaje stary link jako zapas).
  */
-async function uploadImageToNotion(notion: Client, imageUrl: string): Promise<string | null> {
+export async function uploadImageToNotion(notion: Client, imageUrl: string): Promise<string | null> {
     try {
         const res = await axios.get(imageUrl, { responseType: 'arraybuffer', timeout: 30000 });
         const contentType = String(res.headers['content-type'] || 'image/jpeg').split(';')[0];
