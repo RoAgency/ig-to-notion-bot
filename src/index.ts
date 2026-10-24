@@ -4,10 +4,31 @@ import { processInstagramReel } from './services/instagram';
 import { transcribeAudio } from './services/audio';
 import { generateRecipe } from './services/ai';
 import { saveToNotion } from './services/notion';
-import { backfillImages } from './services/backfill';
+import { backfillImages, listRecipeShortcodes } from './services/backfill';
 import { startAiBot } from './aiBot';
 
 let backfillRunning = false;
+let batchRunning = false;
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+/** Pełna ścieżka dla jednej rolki z przepisem: Instagram → transkrypcja → Gemini → Notion. */
+async function processRecipe(url: string, onStep?: (t: string) => Promise<any> | void): Promise<string> {
+    const { description, videoUrl, thumbnailUrl } = await processInstagramReel(url);
+    let transcriptionText = "";
+    if (videoUrl) {
+        await onStep?.('🎵 Pobrano nośnik. Rozpoczynam transkrypcję audio z wideo...');
+        try {
+            transcriptionText = await transcribeAudio(videoUrl);
+        } catch (e) {
+            console.error("Audio error", e);
+            transcriptionText = "[Nie udało się pobrać transkrypcji audio zapasowego.]";
+        }
+    }
+    await onStep?.('🧠 Audio gotowe! Wysyłam dane do Google Gemini w celu formatowania przepisu po polsku...');
+    const recipe = await generateRecipe(description, transcriptionText);
+    await onStep?.('📝 Mam gotowy przepis. Zapisuję do bazy w Notion (wraz z okładką)...');
+    return saveToNotion(recipe, url, thumbnailUrl);
+}
 
 dotenv.config();
 
@@ -54,36 +75,55 @@ bot.on('message', async (msg) => {
         return;
     }
 
-    if (text && (text.includes('instagram.com/reel/') || text.includes('instagram.com/p/'))) {
+    const links = [...new Set(text?.match(/https?:\/\/(?:www\.)?instagram\.com\/(?:reel|reels|p|tv)\/[A-Za-z0-9_-]+\/?/g) || [])];
+
+    // Wiele linków w jednej wiadomości = import listy, z pominięciem przepisów już zapisanych
+    if (links.length > 1) {
+        if (batchRunning) return bot.sendMessage(chatId, '⏳ Import już trwa, poczekaj na podsumowanie.');
+        batchRunning = true;
+        let saved = 0, skipped = 0;
+        const failed: string[] = [];
         try {
-            // 1. Send processing message
-            const processingMsg = await bot.sendMessage(chatId, '⏳ Znaleziono link do Instagrama. Pobieram wideo i opis...');
-
-            // 2. Fetch from Instagram (HikerAPI, zapasowo RapidAPI)
-            const { description, videoUrl, thumbnailUrl } = await processInstagramReel(text);
-
-            let transcriptionText = "";
-            if (videoUrl) {
-                bot.editMessageText('🎵 Pobrano nośnik. Rozpoczynam transkrypcję audio z wideo...', { chat_id: chatId, message_id: processingMsg.message_id });
+            await bot.sendMessage(chatId, `📥 Import: ${links.length} linków. Sprawdzam, które przepisy już są w bazie...`);
+            const existing = await listRecipeShortcodes();
+            const todo = links.filter(u => {
+                const code = u.match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/)?.[1];
+                return !(code && existing.has(code));
+            });
+            skipped = links.length - todo.length;
+            await bot.sendMessage(chatId, `Już w bazie: ${skipped}. Do zapisania: ${todo.length}. Zaczynam.`);
+            for (let i = 0; i < todo.length; i++) {
                 try {
-                    transcriptionText = await transcribeAudio(videoUrl);
-                } catch (e) {
-                    console.error("Audio error", e);
-                    transcriptionText = "[Nie udało się pobrać transkrypcji audio zapasowego.]";
+                    const notionUrl = await processRecipe(todo[i]);
+                    saved++;
+                    await bot.sendMessage(chatId, `✅ ${i + 1}/${todo.length}: ${notionUrl}`);
+                } catch (e: any) {
+                    console.error(`[Import] ${todo[i]}: ${e.message}`);
+                    failed.push(`${todo[i]} - ${e.message.split('\n')[0]}`);
+                    if (/środki|402/.test(e.message)) {
+                        await bot.sendMessage(chatId, '⛔ Skończyły się środki w HikerAPI. Doładuj konto i wyślij tę samą listę jeszcze raz - zapisane przepisy zostaną pominięte.');
+                        break;
+                    }
                 }
+                await sleep(2000);
             }
+            let summary = `🏁 Import zakończony. Zapisane: ${saved}, pominięte (już były): ${skipped}, błędy: ${failed.length}.`;
+            if (failed.length) summary += `\n\n⚠️ Nie udało się:\n- ` + failed.join('\n- ');
+            await bot.sendMessage(chatId, summary.slice(0, 4000));
+        } catch (error: any) {
+            await bot.sendMessage(chatId, `❌ Błąd importu:\n${error.message}`);
+        } finally {
+            batchRunning = false;
+        }
+        return;
+    }
 
-            // 3. Generate recipe via Gemini
-            bot.editMessageText('🧠 Audio gotowe! Wysyłam dane do Google Gemini w celu formatowania przepisu po polsku...', { chat_id: chatId, message_id: processingMsg.message_id });
-            const recipe = await generateRecipe(description, transcriptionText);
-
-            // 4. Save to Notion
-            bot.editMessageText('📝 Mam gotowy przepis. Zapisuję do bazy w Notion (wraz z okładką)...', { chat_id: chatId, message_id: processingMsg.message_id });
-            const notionUrl = await saveToNotion(recipe, text, thumbnailUrl);
-
-            // 5. Success
-            bot.editMessageText(`✅ Gotowe! Zapisano przepis w Notion:\n${notionUrl}`, { chat_id: chatId, message_id: processingMsg.message_id });
-
+    if (links[0]) {
+        try {
+            const processingMsg = await bot.sendMessage(chatId, '⏳ Znaleziono link do Instagrama. Pobieram wideo i opis...');
+            const edit = (t: string) => bot.editMessageText(t, { chat_id: chatId, message_id: processingMsg.message_id }).catch(() => {});
+            const notionUrl = await processRecipe(links[0], edit);
+            await edit(`✅ Gotowe! Zapisano przepis w Notion:\n${notionUrl}`);
         } catch (error: any) {
             const msg = error.message || String(error);
             console.error(`[ERROR] ${msg}`);

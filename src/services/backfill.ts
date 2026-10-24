@@ -62,6 +62,10 @@ export async function backfillImages(onProgress: (text: string) => Promise<void>
         const children = await listAllChildren(notion, page.id);
         const oldImageBlocks = children.filter(b => b.type === 'image' && b.image?.type === 'external' && isInstagramCdn(b.image.external?.url));
 
+        if (page.icon?.type === 'external' && isInstagramCdn(page.icon.external?.url)) {
+            await notion.pages.update({ page_id: page.id, icon: { type: 'emoji', emoji: '🍲' } } as any).catch(() => {});
+        }
+
         if (!coverIsOld && oldImageBlocks.length === 0) continue;
         report.needed++;
 
@@ -101,4 +105,22 @@ export async function backfillImages(onProgress: (text: string) => Promise<void>
     }
 
     return report;
+}
+
+/** Kody rolek (z zakładek na dole stron), które już są w bazie przepisów. */
+export async function listRecipeShortcodes(): Promise<Set<string>> {
+    const apiKey = process.env.NOTION_API_KEY;
+    const databaseId = process.env.NOTION_DATABASE_ID;
+    if (!apiKey || !databaseId) throw new Error("Brak NOTION_API_KEY lub NOTION_DATABASE_ID.");
+    const notion = new Client({ auth: apiKey });
+    const pages = await listAllPages(notion, databaseId.split('?')[0].replace(/-/g, '').slice(-32));
+    const codes = new Set<string>();
+    for (const page of pages) {
+        const children = await listAllChildren(notion, page.id);
+        for (const b of children) {
+            const code = (b.bookmark?.url || '').match(/\/(?:reel|reels|p|tv)\/([A-Za-z0-9_-]+)/)?.[1];
+            if (code) codes.add(code);
+        }
+    }
+    return codes;
 }
